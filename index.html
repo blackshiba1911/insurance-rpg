@@ -1,0 +1,1331 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>《人生 RPG 防禦指南》三部曲自動劇場 & 互動模擬器</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Noto Sans TC & JetBrains Mono -->
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@600;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- Tone.js for RPG Sound Effects -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+
+    <style>
+        :root {
+            --bg-cream: #F7F4EF;
+            --card-warm: #FFFDF9;
+            --slate-dark: #1E242B;
+            --shield-blue: #38BDF8;
+            --shield-gold: #F59E0B;
+            --hp-green: #10B981;
+            --danger-red: #EF4444;
+            --debuff-purple: #A855F7;
+        }
+
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: var(--bg-cream);
+            color: #2C353D;
+            overflow-x: hidden;
+        }
+
+        .font-mono-num {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* 9:16 舞台容器固定比例 */
+        .stage-9-16 {
+            aspect-ratio: 9 / 16;
+            height: min(84vh, 780px);
+            max-width: 100%;
+            position: relative;
+            overflow: hidden;
+            background: radial-gradient(circle at 50% 35%, #263147 0%, #131822 100%);
+            box-shadow: 0 25px 50px -12px rgba(30, 36, 43, 0.35), 0 0 0 8px #262E38;
+            border-radius: 32px;
+            user-select: none;
+        }
+
+        /* 純淨錄影模式樣式 */
+        body.clean-record-mode {
+            background-color: #0b0e14;
+        }
+        body.clean-record-mode .control-sidebar,
+        body.clean-record-mode .top-header-bar {
+            display: none !important;
+        }
+        body.clean-record-mode .stage-9-16 {
+            height: 94vh;
+            box-shadow: 0 0 0 2px rgba(255,255,255,0.15);
+            border-radius: 16px;
+        }
+
+        /* 遊戲背景星塵與網格 */
+        .rpg-grid-bg {
+            background-image: 
+                linear-gradient(to right, rgba(255,255,255,0.04) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(255,255,255,0.04) 1px, transparent 1px);
+            background-size: 28px 28px;
+        }
+
+        /* 半透明能量防護罩動畫 */
+        @keyframes shieldPulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 0 25px rgba(56, 189, 248, 0.45), inset 0 0 20px rgba(56, 189, 248, 0.35); }
+            50% { transform: scale(1.03); box-shadow: 0 0 38px rgba(56, 189, 248, 0.7), inset 0 0 30px rgba(56, 189, 248, 0.5); }
+        }
+
+        @keyframes goldShieldPulse {
+            0%, 100% { transform: scale(1.06); box-shadow: 0 0 30px rgba(245, 158, 11, 0.5), inset 0 0 22px rgba(245, 158, 11, 0.35); }
+            50% { transform: scale(1.09); box-shadow: 0 0 45px rgba(245, 158, 11, 0.8), inset 0 0 32px rgba(245, 158, 11, 0.55); }
+        }
+
+        /* 幻影護盾故障閃爍 (違反告知義務) */
+        @keyframes glitchPhantom {
+            0%, 100% { opacity: 0.9; transform: scale(1) skewX(0deg); filter: hue-rotate(0deg); }
+            20% { opacity: 0.4; transform: scale(1.02) skewX(6deg); }
+            25% { opacity: 0.95; transform: scale(0.98) skewX(-6deg); filter: hue-rotate(90deg); }
+            50% { opacity: 0.25; transform: scale(1.04) translate(3px, -2px); }
+            75% { opacity: 0.85; transform: scale(1); }
+        }
+
+        /* 長照治癒魔法陣旋轉 */
+        @keyframes magicCircleSpin {
+            0% { transform: rotateX(60deg) rotateZ(0deg); }
+            100% { transform: rotateX(60deg) rotateZ(360deg); }
+        }
+
+        /* 角色呼吸浮動 */
+        @keyframes heroFloat {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-6px); }
+        }
+
+        /* 震動受擊特效 */
+        @keyframes screenShake {
+            0%, 100% { transform: translate(0, 0); }
+            15% { transform: translate(-10px, -8px) rotate(-1.5deg); }
+            30% { transform: translate(10px, 6px) rotate(1.5deg); }
+            45% { transform: translate(-8px, 6px) rotate(-1deg); }
+            60% { transform: translate(8px, -6px) rotate(1deg); }
+            75% { transform: translate(-4px, 4px); }
+        }
+
+        /* 浮動傷害/補血數字 */
+        @keyframes floatUpFade {
+            0% { opacity: 0; transform: translateY(15px) scale(0.7); }
+            20% { opacity: 1; transform: translateY(0px) scale(1.1); }
+            80% { opacity: 1; transform: translateY(-28px) scale(1); }
+            100% { opacity: 0; transform: translateY(-42px) scale(0.9); }
+        }
+
+        /* 裝備噴飛動畫 */
+        @keyframes equipFlyOutLeft {
+            0% { opacity: 1; transform: translate(0, 0) rotate(0deg) scale(1); }
+            100% { opacity: 0; transform: translate(-95px, -75px) rotate(-140deg) scale(0.4); filter: grayscale(1); }
+        }
+        @keyframes equipFlyOutRight {
+            0% { opacity: 1; transform: translate(0, 0) rotate(0deg) scale(1); }
+            100% { opacity: 0; transform: translate(95px, -85px) rotate(140deg) scale(0.4); filter: grayscale(1); }
+        }
+
+        /* 二週目寶箱降臨 */
+        @keyframes chestDrop {
+            0% { opacity: 0; transform: translateY(-140px) scale(0.6); }
+            65% { opacity: 1; transform: translateY(10px) scale(1.08); }
+            82% { transform: translateY(-6px) scale(0.97); }
+            100% { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        .animate-shield-blue { animation: shieldPulse 3s infinite ease-in-out; }
+        .animate-shield-gold { animation: goldShieldPulse 3.2s infinite ease-in-out; }
+        .animate-phantom-glitch { animation: glitchPhantom 1.2s infinite linear; }
+        .animate-magic-circle { animation: magicCircleSpin 8s infinite linear; }
+        .animate-hero-float { animation: heroFloat 2.8s infinite ease-in-out; }
+        .animate-shake { animation: screenShake 0.55s cubic-bezier(.36,.07,.19,.97) both; }
+        .animate-float-num { animation: floatUpFade 1.8s ease-out forwards; }
+        .animate-fly-left { animation: equipFlyOutLeft 0.9s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+        .animate-fly-right { animation: equipFlyOutRight 0.9s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+        .animate-chest-drop { animation: chestDrop 1s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+
+        /* 自訂捲軸 */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(0,0,0,0.04); border-radius: 8px; }
+        ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.18); border-radius: 8px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.3); }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between">
+
+    <!-- 頂部導覽列 -->
+    <header class="top-header-bar bg-[#FFFDF9] border-b border-stone-200/80 px-4 py-3 sticky top-0 z-30 shadow-sm">
+        <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-white shadow-md">
+                    <i class="fa-solid fa-shield-halved text-lg"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 class="font-black text-lg sm:text-xl text-stone-800 tracking-tight">《人生 RPG 防禦指南》自動劇場 & 模擬器</h1>
+                        <span class="hidden sm:inline-block text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300/60">9:16 直式短影音生成系統</span>
+                    </div>
+                    <p class="text-xs text-stone-500">結合「捷徑一：網頁自動開演錄製」與「管道 C：Codex + Remotion 程式碼生成包」</p>
+                </div>
+            </div>
+
+            <!-- 模式快速切換 Tabs -->
+            <div class="flex items-center gap-1.5 bg-stone-100 p-1 rounded-xl border border-stone-200">
+                <button onclick="switchMainTab('theater')" id="tab-btn-theater" class="px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all bg-stone-800 text-white shadow-sm">
+                    <i class="fa-solid fa-film mr-1.5 text-amber-400"></i>捷徑一：三部曲自動劇場
+                </button>
+                <button onclick="switchMainTab('sandbox')" id="tab-btn-sandbox" class="px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all text-stone-600 hover:text-stone-900">
+                    <i class="fa-solid fa-gamepad mr-1.5 text-sky-500"></i>互動沙盒試玩
+                </button>
+                <button onclick="switchMainTab('codex')" id="tab-btn-codex" class="px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all text-stone-600 hover:text-stone-900">
+                    <i class="fa-solid fa-terminal mr-1.5 text-emerald-600"></i>管道 C：Codex 指令包
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 純淨錄影模式下的浮動退出按鈕 -->
+    <div id="clean-mode-overlay" class="fixed top-4 right-4 z-50 hidden flex items-center gap-2 bg-stone-900/90 backdrop-blur-md border border-white/15 px-3.5 py-2 rounded-full text-white text-xs shadow-xl">
+        <span class="w-2 h-2 rounded-full bg-red-500 animate-ping"></span>
+        <span>9:16 純淨螢幕錄影模式（Mac 請按 Cmd+Shift+5 框選左側手機舞台）</span>
+        <button onclick="toggleCleanRecordMode()" class="ml-2 px-2.5 py-1 rounded-full bg-white/15 hover:bg-white/25 font-bold transition">
+            退出返回控制台
+        </button>
+    </div>
+
+    <!-- 主內容區：左 9:16 舞台 + 右側控制面板 -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 flex flex-col lg:flex-row items-center lg:items-start justify-center gap-6">
+
+        <!-- ================= 左側：9:16 手機直式遊戲動畫舞台 ================= -->
+        <div class="flex flex-col items-center shrink-0">
+            <div id="stage-container" class="stage-9-16 rpg-grid-bg flex flex-col justify-between text-white relative">
+
+                <!-- 頂部狀態列 HUD -->
+                <div class="relative z-20 px-4 pt-4 pb-2 bg-gradient-to-b from-slate-950/90 via-slate-900/60 to-transparent">
+                    <!-- 集數與年齡等級標籤 -->
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center gap-1.5">
+                            <span id="hud-episode-tag" class="px-2 py-0.5 rounded-md bg-amber-500/20 border border-amber-400/40 text-amber-300 text-[10px] font-bold tracking-wider">
+                                EP.1 新手村破防真相
+                            </span>
+                            <span id="hud-renew-badge" class="hidden px-2 py-0.5 rounded-md bg-sky-500/20 border border-sky-400/50 text-sky-300 text-[10px] font-bold flex items-center gap-1">
+                                <i class="fa-solid fa-rotate text-[9px] animate-spin"></i>保證續保核心
+                            </span>
+                        </div>
+                        <div class="flex items-center gap-1.5 bg-slate-800/90 border border-slate-600/70 px-2.5 py-0.5 rounded-full">
+                            <span class="text-[10px] text-slate-400 font-bold">角色年齡</span>
+                            <span id="hud-age-lv" class="font-mono-num text-xs font-extrabold text-amber-400">LV.25</span>
+                        </div>
+                    </div>
+
+                    <!-- 核心資產血條 (HP) 與 護甲條 (Shield) -->
+                    <div id="single-player-hud" class="space-y-1.5 bg-slate-900/85 backdrop-blur-md p-2.5 rounded-2xl border border-white/10 shadow-lg">
+                        <!-- HP 資產本體 -->
+                        <div>
+                            <div class="flex justify-between text-[11px] font-bold mb-0.5">
+                                <span class="text-emerald-400 flex items-center gap-1">
+                                    <i class="fa-solid fa-heart"></i>核心資產本體 (HP)
+                                </span>
+                                <span id="hud-hp-text" class="font-mono-num text-emerald-300">100 / 100 萬</span>
+                            </div>
+                            <div class="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden p-0.5 border border-slate-700">
+                                <div id="hud-hp-bar" class="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-500" style="width: 50%"></div>
+                            </div>
+                        </div>
+
+                        <!-- Shield 防護罩護甲值 -->
+                        <div>
+                            <div class="flex justify-between text-[11px] font-bold mb-0.5">
+                                <span id="hud-shield-label" class="text-sky-400 flex items-center gap-1">
+                                    <i class="fa-solid fa-shield-halved"></i>風險防護罩 (Shield)
+                                </span>
+                                <span id="hud-shield-text" class="font-mono-num text-sky-300">0 點</span>
+                            </div>
+                            <div class="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden p-0.5 border border-slate-700">
+                                <div id="hud-shield-bar" class="h-full bg-gradient-to-r from-sky-500 via-cyan-400 to-amber-300 rounded-full transition-all duration-500" style="width: 0%"></div>
+                            </div>
+                        </div>
+
+                        <!-- 狀態 Buff / Debuff 列 -->
+                        <div id="hud-buff-row" class="flex flex-wrap gap-1 pt-0.5 min-h-[18px]">
+                            <span class="text-[10px] text-slate-400">狀態：滿血健康（可自由配置裝備）</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ================= 中央主視覺演出舞台 ================= -->
+                <div id="stage-center" class="relative flex-1 flex flex-col items-center justify-center px-3 overflow-hidden">
+
+                    <!-- 頂部浮動事件橫幅 -->
+                    <div id="stage-event-banner" class="absolute top-2 left-3 right-3 z-30 hidden transform transition-all duration-300">
+                        <div id="stage-event-box" class="px-3 py-2 rounded-xl bg-red-950/90 border border-red-500/70 text-center shadow-xl">
+                            <p id="stage-event-title" class="text-xs font-black text-red-300 tracking-wide">⚠️ 突發魔王級風險降臨！</p>
+                            <p id="stage-event-desc" class="text-[11px] text-red-100 mt-0.5">攻擊力 -300 點直接轟擊！</p>
+                        </div>
+                    </div>
+
+                    <!-- 【模式 A：單一主角舞台 (平常與 EP2 / EP3 使用)】 -->
+                    <div id="single-stage-view" class="relative w-full h-full flex flex-col items-center justify-center">
+
+                        <!-- 浮動傷害或補血數字容器 -->
+                        <div id="floating-numbers-layer" class="absolute inset-0 pointer-events-none z-40 flex items-center justify-center"></div>
+
+                        <!-- 系統警告彈窗 (EP2 商店鎖定 / 違反誠實告知無效) -->
+                        <div id="system-alert-modal" class="hidden absolute z-40 inset-x-4 top-1/2 -translate-y-1/2 bg-slate-950/95 border-2 border-red-500 rounded-2xl p-4 text-center shadow-2xl">
+                            <div class="w-10 h-10 rounded-full bg-red-500/20 border border-red-500 text-red-400 flex items-center justify-center mx-auto mb-2">
+                                <i id="system-alert-icon" class="fa-solid fa-triangle-exclamation text-lg"></i>
+                            </div>
+                            <h4 id="system-alert-title" class="text-sm font-black text-red-400">❌ 系統判定：違反誠實告知</h4>
+                            <p id="system-alert-body" class="text-xs text-slate-200 mt-1 leading-relaxed">
+                                偵測到投保前隱瞞既有傷勢（違反保險法第64條），幻影護盾直接解除失效！傷害 100% 貫穿資產！
+                            </p>
+                        </div>
+
+                        <!-- 二週目繼承寶箱覆蓋層 (EP3 終局傳承) -->
+                        <div id="new-game-plus-view" class="hidden absolute inset-0 z-30 bg-gradient-to-b from-amber-950/90 via-slate-900/95 to-slate-950 flex flex-col items-center justify-center p-5 text-center">
+                            <span class="px-3 py-1 rounded-full bg-amber-400/20 border border-amber-400/50 text-amber-300 text-xs font-black tracking-widest mb-2">
+                                🌟 NEW GAME+ 第二週目啟動
+                            </span>
+                            <h3 class="text-lg font-black text-white mb-1">下一代角色進入新手村</h3>
+                            <p class="text-xs text-amber-200/80 mb-5">一週目主角已登出人生，觸發終局傳承技能</p>
+
+                            <!-- 黃金繼承寶箱 SVG -->
+                            <div class="animate-chest-drop relative my-2">
+                                <div class="w-32 h-32 rounded-full bg-amber-400/20 blur-xl absolute -inset-2 animate-pulse"></div>
+                                <div class="relative w-28 h-28 rounded-3xl bg-gradient-to-br from-amber-400 via-yellow-500 to-orange-600 p-1 shadow-[0_0_40px_rgba(245,158,11,0.6)] flex flex-col items-center justify-center border-2 border-yellow-200">
+                                    <i class="fa-solid fa-treasure-chest text-4xl text-white drop-shadow"></i>
+                                    <i class="fa-solid fa-crown text-3xl text-yellow-100 mb-1"></i>
+                                    <span class="text-[11px] font-black text-amber-950 bg-yellow-200 px-2 py-0.5 rounded-full">壽險傳承寶箱</span>
+                                </div>
+                            </div>
+
+                            <div class="mt-4 bg-slate-900/90 border border-amber-400/40 rounded-xl p-3 w-full">
+                                <div class="text-xs font-bold text-amber-300">👑 獲得開局滿格啟動資金！</div>
+                                <div class="font-mono-num text-base font-black text-emerald-400 mt-0.5">+ $1,000 萬 免從零農起</div>
+                            </div>
+                        </div>
+
+                        <!-- 角色與外圍半透明防護罩核心區 -->
+                        <div class="relative flex items-center justify-center w-64 h-64">
+
+                            <!-- 外層：疊加高階金色護盾圈 (Multi-layer Shield) -->
+                            <div id="visual-shield-outer" class="hidden absolute w-60 h-60 rounded-full border-2 border-amber-400/75 bg-amber-400/10 animate-shield-gold pointer-events-none transition-all duration-500 flex items-start justify-center pt-2">
+                                <span class="text-[9px] font-bold px-2 py-0.5 rounded-full bg-amber-500/80 text-slate-950 shadow">
+                                    重大傷病/實支加厚層
+                                </span>
+                            </div>
+
+                            <!-- 內層：基礎藍色能量防護罩 (Basic Shield) -->
+                            <div id="visual-shield-inner" class="hidden absolute w-48 h-48 rounded-full border-2 border-sky-400/80 bg-sky-400/15 animate-shield-blue pointer-events-none transition-all duration-500 flex items-end justify-center pb-2">
+                                <span id="visual-shield-badge" class="text-[9px] font-bold px-2 py-0.5 rounded-full bg-sky-500/90 text-slate-950 shadow">
+                                    基礎定期防護罩
+                                </span>
+                            </div>
+
+                            <!-- 違反告知：幻影金色假護盾 (Phantom Shield) -->
+                            <div id="visual-shield-phantom" class="hidden absolute w-56 h-56 rounded-full border-2 border-dashed border-yellow-300 bg-yellow-400/15 animate-phantom-glitch pointer-events-none flex items-start justify-center pt-2">
+                                <span class="text-[9px] font-bold px-2 py-0.5 rounded-full bg-red-600 text-white shadow">
+                                    ⚠️ 隱瞞體況：幻影金盾
+                                </span>
+                            </div>
+
+                            <!-- 長照險：腳下綠色持續回血魔法陣 (HoT Magic Circle) -->
+                            <div id="visual-ltc-circle" class="hidden absolute -bottom-3 w-52 h-20 rounded-full border-2 border-emerald-400 bg-emerald-500/20 shadow-[0_0_30px_rgba(16,185,129,0.7)] flex items-center justify-center">
+                                <div class="w-44 h-14 rounded-full border border-dashed border-teal-200 flex items-center justify-center">
+                                    <span class="text-[10px] font-black text-emerald-300 bg-slate-950/80 px-2 py-0.5 rounded-full border border-emerald-400/50">
+                                        🌿 長照持續回血陣 +1000/月
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- 主角本體與穿戴的資產裝備 -->
+                            <div id="hero-character-box" class="relative z-10 flex flex-col items-center animate-hero-float">
+
+                                <!-- 頭頂異常狀態 Debuff (體況問題/冰凍麻痺) -->
+                                <div id="hero-debuff-pill" class="hidden mb-1.5 px-2.5 py-0.5 rounded-full bg-purple-900/90 border border-purple-400 text-purple-200 text-[10px] font-bold shadow-lg flex items-center gap-1">
+                                    <i class="fa-solid fa-skull-crossbones text-purple-300"></i>
+                                    <span id="hero-debuff-text">慢性體況異常 (商店鎖定)</span>
+                                </div>
+
+                                <!-- 角色頭像圓盤 -->
+                                <div id="hero-avatar-circle" class="w-24 h-24 rounded-3xl bg-gradient-to-b from-slate-700 to-slate-800 border-2 border-amber-300/80 shadow-xl flex flex-col items-center justify-center relative">
+                                    <i id="hero-main-icon" class="fa-solid fa-user-astronaut text-4xl text-amber-300"></i>
+                                    <span id="hero-class-title" class="text-[10px] font-bold text-slate-200 mt-1 bg-slate-900/80 px-2 py-0.2 rounded-full">
+                                        新手冒險者
+                                    </span>
+                                </div>
+
+                                <!-- 身邊環繞穿戴的三大資產裝備欄 (現金、股票ETF、房產城堡) -->
+                                <div class="flex items-center justify-center gap-2 mt-2.5">
+                                    <!-- 裝備 1：現金流金袋 -->
+                                    <div id="equip-cash" class="px-2 py-1 rounded-xl bg-amber-500/20 border border-amber-400/60 flex items-center gap-1 text-amber-200 text-[10px] font-bold transition-all duration-300">
+                                        <i class="fa-solid fa-sack-dollar text-amber-400"></i>
+                                        <span>現金袋</span>
+                                    </div>
+                                    <!-- 裝備 2：股票 ETF 魔法書 -->
+                                    <div id="equip-etf" class="hidden px-2 py-1 rounded-xl bg-indigo-500/25 border border-indigo-400/70 flex items-center gap-1 text-indigo-200 text-[10px] font-bold transition-all duration-300">
+                                        <i class="fa-solid fa-book-sparkles text-indigo-300"></i>
+                                        <span>ETF法書</span>
+                                    </div>
+                                    <!-- 裝備 3：房產小城堡 -->
+                                    <div id="equip-house" class="hidden px-2 py-1 rounded-xl bg-emerald-500/25 border border-emerald-400/70 flex items-center gap-1 text-emerald-200 text-[10px] font-bold transition-all duration-300">
+                                        <i class="fa-solid fa-chess-rook text-emerald-300"></i>
+                                        <span>房產堡壘</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 【模式 B：EP1 經典上下分割破防對照舞台 (18s-32s 專用)】 -->
+                    <div id="split-stage-view" class="hidden w-full h-full flex flex-col justify-between py-1 gap-2">
+                        <!-- 上方：薄護盾玩家 (Shield 50 -> 遭 -300 隕石破防噴裝備) -->
+                        <div id="split-top-box" class="flex-1 rounded-2xl bg-red-950/35 border border-red-500/40 p-2.5 flex flex-col justify-between relative overflow-hidden">
+                            <div class="flex items-center justify-between text-[11px]">
+                                <span class="font-black text-red-300 bg-red-950/90 px-2 py-0.5 rounded-md border border-red-500/40">
+                                    ❌ 對照組 A：薄護盾玩家 (護盾僅 50)
+                                </span>
+                                <span id="split-top-status" class="font-mono-num text-xs font-bold text-red-400">破防！-250 貫穿資產</span>
+                            </div>
+
+                            <div class="flex items-center justify-around my-auto relative">
+                                <!-- 碎裂護盾與受傷主角 -->
+                                <div class="relative flex items-center justify-center w-20 h-20">
+                                    <div id="split-top-shield" class="absolute inset-0 rounded-full border-2 border-dashed border-red-400/60 scale-110 opacity-40"></div>
+                                    <div class="w-14 h-14 rounded-2xl bg-slate-800 border border-red-400 flex flex-col items-center justify-center">
+                                        <i class="fa-solid fa-user-injured text-xl text-red-400"></i>
+                                        <span class="text-[9px] text-red-200 mt-0.5">被迫賣資產</span>
+                                    </div>
+                                </div>
+
+                                <!-- 噴飛的股票與金幣 -->
+                                <div class="space-y-1 text-right">
+                                    <div class="inline-block px-2 py-0.5 rounded bg-red-600 text-white font-mono-num text-xs font-black animate-bounce">
+                                        ☄️ 隕石暴擊 -300！
+                                    </div>
+                                    <div class="text-[11px] text-red-200 flex items-center justify-end gap-1">
+                                        <i class="fa-solid fa-book-sparkles line-through text-slate-400"></i>
+                                        <span>ETF 股票被迫砍在低點變現</span>
+                                    </div>
+                                    <div class="text-[11px] text-red-200 flex items-center justify-end gap-1">
+                                        <i class="fa-solid fa-sack-dollar line-through text-slate-400"></i>
+                                        <span>現金老本瞬間蒸發 -250 萬</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 下方：厚護盾玩家 (Shield 300 -> 完美扛住 -300 隕石，資產零損傷) -->
+                        <div id="split-bottom-box" class="flex-1 rounded-2xl bg-sky-950/40 border border-sky-400/50 p-2.5 flex flex-col justify-between relative overflow-hidden">
+                            <div class="flex items-center justify-between text-[11px]">
+                                <span class="font-black text-sky-300 bg-sky-950/90 px-2 py-0.5 rounded-md border border-sky-400/40">
+                                    🛡️ 對照組 B：複合厚護盾玩家 (護盾 300)
+                                </span>
+                                <span class="font-mono-num text-xs font-bold text-emerald-400">0 穿透！神裝完好無損</span>
+                            </div>
+
+                            <div class="flex items-center justify-around my-auto">
+                                <!-- 堅固雙層護盾與主角 -->
+                                <div class="relative flex items-center justify-center w-24 h-24">
+                                    <div class="absolute inset-0 rounded-full border-2 border-amber-400 bg-amber-400/15 animate-pulse"></div>
+                                    <div class="absolute inset-2 rounded-full border-2 border-sky-400 bg-sky-400/20"></div>
+                                    <div class="relative w-14 h-14 rounded-2xl bg-slate-800 border border-amber-300 flex flex-col items-center justify-center">
+                                        <i class="fa-solid fa-user-shield text-xl text-amber-300"></i>
+                                        <span class="text-[9px] text-emerald-300 mt-0.5">資產穩健長大</span>
+                                    </div>
+                                </div>
+
+                                <div class="space-y-1 text-right">
+                                    <div class="inline-block px-2 py-0.5 rounded bg-emerald-600 text-white font-mono-num text-xs font-black">
+                                        🛡️ 護盾完全吸收 300 點傷害！
+                                    </div>
+                                    <div class="text-[11px] text-sky-100 flex items-center justify-end gap-1">
+                                        <i class="fa-solid fa-check-circle text-emerald-400"></i>
+                                        <span>ETF 魔法書與房產繼續複利</span>
+                                    </div>
+                                    <div class="text-[11px] text-amber-200 flex items-center justify-end gap-1">
+                                        <i class="fa-solid fa-rotate text-sky-400"></i>
+                                        <span>保證續保核心：隔年護盾自動回滿</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- ================= 底部：電影感繁體中文字幕與時間軸 ================= -->
+                <div class="relative z-20 px-3.5 pb-4 pt-2 bg-gradient-to-t from-slate-950 via-slate-950/95 to-transparent">
+                    <!-- 台詞字幕盒 -->
+                    <div class="bg-slate-900/95 border border-amber-400/30 rounded-2xl p-3 shadow-lg min-h-[78px] flex flex-col justify-center">
+                        <div class="flex items-center justify-between mb-1">
+                            <span id="subtitle-scene-tag" class="text-[10px] font-bold text-amber-400 uppercase tracking-wider">
+                                🎬 準備開演：點擊右側「一鍵自動開演」
+                            </span>
+                            <span id="subtitle-time-code" class="font-mono-num text-[10px] text-slate-400">00:00 / 00:45</span>
+                        </div>
+                        <p id="subtitle-text" class="text-xs sm:text-[13px] font-bold text-white leading-relaxed">
+                            如果把人生當成一場 RPG 遊戲，我們每天努力工作存錢、買 ETF、買房，其實就是在幫角色穿戴「資產神裝」……
+                        </p>
+                    </div>
+
+                    <!-- 劇本進度條 -->
+                    <div class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden mt-2.5">
+                        <div id="theater-progress-bar" class="h-full bg-gradient-to-r from-amber-400 via-orange-500 to-sky-400 transition-all duration-300" style="width: 0%"></div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- ================= 右側：多功能控制工作台 ================= -->
+        <div class="control-sidebar flex-1 w-full max-w-2xl space-y-4">
+
+            <!-- 【面板 1：捷徑一 三部曲自動劇場控制台】 -->
+            <section id="panel-theater" class="bg-[#FFFDF9] rounded-3xl border border-stone-200/90 p-5 sm:p-6 shadow-sm space-y-5">
+                <div class="flex flex-wrap items-center justify-between gap-2 border-b border-stone-200 pb-4">
+                    <div>
+                        <span class="text-xs font-extrabold text-amber-700 bg-amber-100 px-2.5 py-0.5 rounded-md">捷徑一：免剪輯直接開演</span>
+                        <h2 class="text-lg sm:text-xl font-black text-stone-800 mt-1">三部曲劇本一鍵自動播放器</h2>
+                    </div>
+                    <button onclick="toggleCleanRecordMode()" class="px-3.5 py-2 rounded-xl bg-stone-800 hover:bg-stone-900 text-white text-xs font-bold flex items-center gap-1.5 shadow transition">
+                        <i class="fa-solid fa-video text-red-400"></i>進入 9:16 純淨螢幕錄影模式
+                    </button>
+                </div>
+
+                <!-- 選擇集數 (EP1 / EP2 / EP3) -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <button onclick="selectEpisode(1)" id="ep-card-1" class="text-left p-3.5 rounded-2xl border-2 border-amber-500 bg-amber-50/70 transition hover:shadow-md">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-black text-amber-800">第一集 (45秒)</span>
+                            <i class="fa-solid fa-meteor text-amber-600"></i>
+                        </div>
+                        <div class="font-bold text-sm text-stone-900 mt-1">新手村的破防真相</div>
+                        <p class="text-[11px] text-stone-600 mt-1 leading-snug">穿戴資產裝備＋複合護盾＋保證續保＋上下分割 -300 隕石破防對決</p>
+                    </button>
+
+                    <button onclick="selectEpisode(2)" id="ep-card-2" class="text-left p-3.5 rounded-2xl border border-stone-200 bg-white transition hover:border-amber-400 hover:shadow-md">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-black text-stone-500">第二集 (45秒)</span>
+                            <i class="fa-solid fa-triangle-exclamation text-purple-600"></i>
+                        </div>
+                        <div class="font-bold text-sm text-stone-900 mt-1">隱藏的系統陷阱</div>
+                        <p class="text-[11px] text-stone-600 mt-1 leading-snug">體況異常鎖定商店＋隱瞞告知「幻影金盾」遭魔王砍中瞬間蒸發</p>
+                    </button>
+
+                    <button onclick="selectEpisode(3)" id="ep-card-3" class="text-left p-3.5 rounded-2xl border border-stone-200 bg-white transition hover:border-amber-400 hover:shadow-md">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-black text-stone-500">第三集 (45秒)</span>
+                            <i class="fa-solid fa-crown text-emerald-600"></i>
+                        </div>
+                        <div class="font-bold text-sm text-stone-900 mt-1">終局之戰兩大神技</div>
+                        <p class="text-[11px] text-stone-600 mt-1 leading-snug">65歲失能冰凍持續扣血＋長照綠色回血陣＋New Game+ 壽險傳承寶箱</p>
+                    </button>
+                </div>
+
+                <!-- 播放主控按鈕列 -->
+                <div class="flex flex-wrap items-center gap-3 bg-stone-100/90 p-3.5 rounded-2xl border border-stone-200">
+                    <button onclick="startOrToggleAutoPlay()" id="btn-main-play" class="flex-1 min-w-[180px] py-3 px-5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-black text-sm shadow-md flex items-center justify-center gap-2 transition transform active:scale-95">
+                        <i id="btn-main-play-icon" class="fa-solid fa-play"></i>
+                        <span id="btn-main-play-text">▶️ 一鍵自動開演本集劇本</span>
+                    </button>
+
+                    <button onclick="resetTheaterEpisode()" class="py-3 px-4 rounded-xl bg-white hover:bg-stone-50 text-stone-700 border border-stone-300 font-bold text-xs flex items-center gap-1.5 transition">
+                        <i class="fa-solid fa-rotate-left"></i>重頭開始
+                    </button>
+
+                    <label class="flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-stone-300 text-xs font-bold text-stone-700 cursor-pointer select-none">
+                        <input type="checkbox" id="tts-voice-toggle" checked class="accent-amber-600 w-4 h-4 rounded">
+                        <span>🔊 自動語音旁白</span>
+                    </label>
+                </div>
+
+                <!-- 分鏡段落快速跳轉清單 -->
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <h3 class="text-xs font-black text-stone-500 uppercase tracking-wider">本集分鏡時間軸（可直接點擊跳轉任一幕）</h3>
+                        <span class="text-[11px] text-stone-400">搭配音效與視覺特效自動同步</span>
+                    </div>
+                    <div id="scene-steps-list" class="space-y-2 max-h-60 overflow-y-auto pr-1">
+                        <!-- 由 JS 動態渲染分鏡步驟 -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- 【面板 2：互動沙盒試玩模式 (手動點選給客戶看)】 -->
+            <section id="panel-sandbox" class="hidden bg-[#FFFDF9] rounded-3xl border border-stone-200/90 p-5 sm:p-6 shadow-sm space-y-5">
+                <div class="border-b border-stone-200 pb-3">
+                    <span class="text-xs font-extrabold text-sky-700 bg-sky-100 px-2.5 py-0.5 rounded-md">互動小遊戲模式</span>
+                    <h2 class="text-lg sm:text-xl font-black text-stone-800 mt-1">親手配置裝備與防護罩，實測大魔王攻擊！</h2>
+                    <p class="text-xs text-stone-500 mt-0.5">你可以直接拿這頁給朋友或客戶自己點點看，親眼驗證「有沒有護盾」跟「違反誠實告知」的破防瞬間。</p>
+                </div>
+
+                <!-- 步驟 1：累積資產裝備 -->
+                <div class="space-y-2">
+                    <label class="text-xs font-black text-stone-700 flex items-center gap-1.5">
+                        <span class="w-5 h-5 rounded-full bg-stone-800 text-white inline-flex items-center justify-center text-[10px]">1</span>
+                        推進年齡與穿戴「資產裝備」（增加核心資產 HP）
+                    </label>
+                    <div class="grid grid-cols-3 gap-2">
+                        <button onclick="sandboxAddAsset('cash')" class="p-2.5 rounded-xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold flex flex-col items-center gap-1 transition">
+                            <i class="fa-solid fa-sack-dollar text-base text-amber-600"></i>
+                            <span>+ 存現金袋 (+50萬)</span>
+                        </button>
+                        <button onclick="sandboxAddAsset('etf')" class="p-2.5 rounded-xl border border-indigo-300 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 text-xs font-bold flex flex-col items-center gap-1 transition">
+                            <i class="fa-solid fa-book-sparkles text-base text-indigo-600"></i>
+                            <span>+ 買 ETF 法書 (+100萬)</span>
+                        </button>
+                        <button onclick="sandboxAddAsset('house')" class="p-2.5 rounded-xl border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 text-xs font-bold flex flex-col items-center gap-1 transition">
+                            <i class="fa-solid fa-chess-rook text-base text-emerald-600"></i>
+                            <span>+ 築房產堡壘 (+150萬)</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 步驟 2：架設防護罩與現實面條件 -->
+                <div class="space-y-2">
+                    <label class="text-xs font-black text-stone-700 flex items-center gap-1.5">
+                        <span class="w-5 h-5 rounded-full bg-stone-800 text-white inline-flex items-center justify-center text-[10px]">2</span>
+                        配置外圍「風險防護罩」（測試疊加、拒保與隱瞞告知）
+                    </label>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        <button onclick="sandboxSetShield('thin')" class="p-2.5 rounded-xl border border-sky-300 bg-sky-50 hover:bg-sky-100 text-sky-900 text-xs font-bold transition">
+                            🛡️ 基礎薄護盾 (50點)
+                        </button>
+                        <button onclick="sandboxSetShield('thick')" class="p-2.5 rounded-xl border border-amber-400 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold transition">
+                            🛡️ 複合厚護盾 (300點)
+                        </button>
+                        <button onclick="sandboxSetShield('debuff')" class="p-2.5 rounded-xl border border-purple-300 bg-purple-50 hover:bg-purple-100 text-purple-900 text-xs font-bold transition">
+                            ⚠️ 染上體況 (商店鎖定)
+                        </button>
+                        <button onclick="sandboxSetShield('phantom')" class="p-2.5 rounded-xl border border-red-300 bg-red-50 hover:bg-red-100 text-red-900 text-xs font-bold transition">
+                            🤥 隱瞞告知 (幻影金盾)
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 步驟 3：召喚風險與二週目 -->
+                <div class="space-y-2">
+                    <label class="text-xs font-black text-stone-700 flex items-center gap-1.5">
+                        <span class="w-5 h-5 rounded-full bg-stone-800 text-white inline-flex items-center justify-center text-[10px]">3</span>
+                        觸發突發事件與終局技能
+                    </label>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                        <button onclick="sandboxTriggerAttack('meteor')" class="py-3 px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-black shadow flex items-center justify-center gap-1.5 transition">
+                            <i class="fa-solid fa-meteor"></i>召喚 -300 隕石暴擊
+                        </button>
+                        <button onclick="sandboxTriggerAttack('ltc')" class="py-3 px-4 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-black shadow flex items-center justify-center gap-1.5 transition">
+                            <i class="fa-solid fa-snowflake"></i>失能扣血 vs 長照回血陣
+                        </button>
+                        <button onclick="sandboxTriggerAttack('ngplus')" class="py-3 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-black shadow flex items-center justify-center gap-1.5 transition">
+                            <i class="fa-solid fa-crown"></i>開啟二週目壽險寶箱
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 【面板 3：管道 C Codex + Remotion 一鍵生成指令包】 -->
+            <section id="panel-codex" class="hidden bg-[#FFFDF9] rounded-3xl border border-stone-200/90 p-5 sm:p-6 shadow-sm space-y-4">
+                <div class="border-b border-stone-200 pb-3">
+                    <span class="text-xs font-extrabold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-md">管道 C：用 AI 寫程式直接輸出 MP4</span>
+                    <h2 class="text-lg sm:text-xl font-black text-stone-800 mt-1">Codex + Remotion 專屬一鍵生成指令包</h2>
+                    <p class="text-xs text-stone-600 mt-0.5 leading-relaxed">
+                        如果你想體驗在電腦上讓 **ChatGPT 桌面版（Codex 模式）** 自動建立專案並算圖輸出成 `out.mp4` 影片檔，只要照著下面兩步驟複製貼上即可：
+                    </p>
+                </div>
+
+                <!-- 步驟一：開啟資料夾 -->
+                <div class="bg-stone-100 rounded-2xl p-3.5 border border-stone-200 text-xs space-y-1.5">
+                    <div class="font-black text-stone-800">STEP 1：在電腦建立空資料夾並開啟 Codex</div>
+                    <p class="text-stone-600">在 Mac 桌面新增一個名為 <code class="bg-white px-1.5 py-0.5 rounded border">rpg-video</code> 的資料夾，打開 ChatGPT 桌面版切換至 **Codex**，將工作目錄指向該資料夾。</p>
+                </div>
+
+                <!-- 步驟二：一鍵複製 Prompt -->
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-black text-stone-800">STEP 2：複製下方完整規格指令，直接貼給 Codex</span>
+                        <button onclick="copyCodexPrompt()" id="btn-copy-codex" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition">
+                            <i class="fa-regular fa-copy"></i>一鍵複製 Codex 專屬指令
+                        </button>
+                    </div>
+                    <textarea id="codex-prompt-textarea" readonly class="w-full h-56 p-3.5 rounded-2xl bg-slate-900 text-emerald-300 font-mono text-xs leading-relaxed border border-slate-700 focus:outline-none">請使用 Remotion 框架幫我建立一個 9:16 直式短影音專案（解析度 1080x1920, 30fps, 總長 45 秒，共 1350 幀），主題為《人生 RPG 防禦指南：新手村的破防真相》，全部字幕與 UI 請使用繁體中文（Noto Sans TC）：
+
+1. 【視覺介面 HUD】：
+   - 頂部固定顯示角色年齡（LV.25 -> LV.35 -> LV.45）、綠色「核心資產 HP 條」與天藍色「風險防護罩 Shield 條」。
+2. 【分鏡時間軸】：
+   - 0~8秒 (0~240幀)：主角站在畫面中央，隨年齡跳動依序浮現穿戴三件發光裝備：「現金袋」、「ETF魔法書」、「房產堡壘」。底部字幕顯示：「如果把人生當成一場 RPG，存錢、買股票跟買房，就是在幫自己穿戴資產神裝。」
+   - 8~18秒 (240~540幀)：主角外圍展開一層半透明藍色圓形能量護盾（Shield +100），接著再疊加一層金色外圈（Shield 升至 300），右上角亮起「🔄 保證續保核心啟動」。底部字幕：「撥出少量預算就能撐起防護罩，透過險種疊加加厚，裝上保證續保核心還能每年自動回滿！」
+   - 18~34秒 (540~1020幀)：畫面上下分割對比！天降「☄️ -300 巨型隕石」：
+     * 上半部（薄護盾玩家 Shield 50）：護盾出現玻璃碎裂特效，跳出紅字「破防！-250 貫穿本體！」，ETF魔法書與現金袋被震飛變灰。
+     * 下半部（厚護盾玩家 Shield 300）：護盾吸收 300 點傷害，跳出綠字「0 資產損傷！神裝完好無損」。
+   - 34~45秒 (1020~1350幀)：展示第二集預告（「⚠️ 狀態異常鎖定商店」與「🚨 隱瞞告知幻影金盾失效」）及第三集（「🌿 長照持續回血陣」與「👑 二週目壽險傳承寶箱」）。
+3. 完成後請直接幫我執行 npx remotion render 輸出成 rpg-defense-ep1.mp4。</textarea>
+                </div>
+            </section>
+
+        </div>
+    </main>
+
+    <script>
+        // ==================== 音效合成器 (Tone.js 無外部音源依賴) ====================
+        let audioInitialized = false;
+        let synth, metalSynth, noiseSynth;
+
+        async function initAudio() {
+            if (audioInitialized) return;
+            try {
+                await Tone.start();
+                synth = new Tone.PolySynth(Tone.Synth, {
+                    oscillator: { type: "triangle" },
+                    envelope: { attack: 0.02, decay: 0.15, sustain: 0.1, release: 0.4 }
+                }).toDestination();
+                synth.volume.value = -8;
+
+                noiseSynth = new Tone.NoiseSynth({
+                    noise: { type: "pink" },
+                    envelope: { attack: 0.005, decay: 0.25, sustain: 0 }
+                }).toDestination();
+                noiseSynth.volume.value = -6;
+                audioInitialized = true;
+            } catch (e) {
+                console.warn("Audio init skipped:", e);
+            }
+        }
+
+        function playSfx(type) {
+            if (!audioInitialized) return;
+            try {
+                const now = Tone.now();
+                if (type === 'equip') {
+                    synth.triggerAttackRelease(["C5", "E5", "G5"], "16n", now);
+                } else if (type === 'shieldUp') {
+                    synth.triggerAttackRelease(["G4", "C5", "E5", "C6"], "8n", now);
+                } else if (type === 'meteorHit') {
+                    noiseSynth.triggerAttackRelease("8n", now);
+                    synth.triggerAttackRelease(["C2", "G2"], "4n", now);
+                } else if (type === 'errorLock') {
+                    synth.triggerAttackRelease(["F#3", "C3"], "8n", now);
+                } else if (type === 'healBuff') {
+                    synth.triggerAttackRelease(["D5", "F#5", "A5", "D6"], "8n", now);
+                } else if (type === 'treasure') {
+                    synth.triggerAttackRelease(["C5", "E5", "G5", "B5", "C6"], "4n", now);
+                }
+            } catch (e) {}
+        }
+
+        // ==================== 三部曲完整分鏡劇本資料庫 ====================
+        const EPISODES_DATA = {
+            1: {
+                title: "EP.1 新手村的破防真相",
+                scenes: [
+                    {
+                        timeLabel: "00:00 - 00:09",
+                        duration: 9000,
+                        tag: "第一幕：農裝備（累積多元資產）",
+                        subtitle: "如果把人生當成一場 RPG 遊戲，我們每天努力工作存錢、買 ETF、買房，其實就是在幫角色穿戴「資產神裝」。",
+                        action: () => {
+                            showSingleStage();
+                            setHud("LV.25 ➔ LV.35", 300, 300, 0, 300, "狀態：努力農裝備累積資產中");
+                            document.getElementById('hud-renew-badge').classList.add('hidden');
+                            setEquipVisible(true, true, true, false);
+                            setShieldVisual(false, false, false);
+                            setDebuffVisual(false);
+                            setLtcCircle(false);
+                            hideBannerAndModals();
+                            spawnFloatingText("+現金 +ETF +房產神裝！", "text-emerald-300");
+                            playSfx('equip');
+                        }
+                    },
+                    {
+                        timeLabel: "00:09 - 00:19",
+                        duration: 9500,
+                        tag: "第二幕：複合護盾 ＋ 保證續保核心",
+                        subtitle: "聰明的玩家會用小預算撐起「定期險防護罩」，還能疊加險種把護盾加厚！裝上「保證續保」核心，每年都能自動回滿。",
+                        action: () => {
+                            showSingleStage();
+                            setHud("LV.35", 300, 300, 300, 300, "🔄 保證續保已啟動｜雙層複合護盾生效中");
+                            document.getElementById('hud-renew-badge').classList.remove('hidden');
+                            setEquipVisible(true, true, true, false);
+                            setShieldVisual(true, true, false);
+                            spawnFloatingText("🛡️ 護盾疊加 +300！", "text-sky-300");
+                            playSfx('shieldUp');
+                        }
+                    },
+                    {
+                        timeLabel: "00:19 - 00:34",
+                        duration: 11500,
+                        tag: "第三幕：-300 隕石破防對決（上下分割對照）",
+                        subtitle: "當攻擊力 300 的大魔王砸下來！護盾只有 50 的玩家會瞬間「破防」，剩下的 250 點傷害直接把股票跟老本打飛！",
+                        action: () => {
+                            showSplitStage();
+                            triggerStageShake();
+                            showBanner("☄️ 突發大魔王：攻擊力 -300 隕石襲來！", "薄護盾(50)瞬間碎裂穿透 vs 厚護盾(300)完美扛下", "red");
+                            playSfx('meteorHit');
+                        }
+                    },
+                    {
+                        timeLabel: "00:34 - 00:45",
+                        duration: 9000,
+                        tag: "第四幕：安全複利成長 & 下集預告",
+                        subtitle: "防護罩夠厚，裡面的裝備才能安心長大！但有兩種情況，就算你有錢也開不了護盾……我們第二集揭曉！",
+                        action: () => {
+                            showSingleStage();
+                            hideBannerAndModals();
+                            setHud("LV.45 資產複利升級", 500, 500, 300, 300, "✨ 護盾成功保護核心資產，裝備持續升級！");
+                            setEquipVisible(true, true, true, false);
+                            setShieldVisual(true, true, false);
+                            spawnFloatingText("✨ 資產毫髮無傷，持續增值！", "text-amber-300");
+                            playSfx('shieldUp');
+                        }
+                    }
+                ]
+            },
+            2: {
+                title: "EP.2 隱藏的系統陷阱",
+                scenes: [
+                    {
+                        timeLabel: "00:00 - 00:11",
+                        duration: 9500,
+                        tag: "第一幕：體況異常 Debuff（商店鎖定拒保）",
+                        subtitle: "在人生 RPG 裡，防護罩商店只對「滿血健康」的玩家開放！一旦先受了傷、頭上掛著異常狀態再去買，商店會直接鎖死！",
+                        action: () => {
+                            showSingleStage();
+                            hideBannerAndModals();
+                            setHud("LV.38", 200, 300, 0, 300, "❌ 警告：偵測到既有體況異常，護盾商店已鎖定");
+                            document.getElementById('hud-renew-badge').classList.add('hidden');
+                            setShieldVisual(false, false, false);
+                            setDebuffVisual(true, "⚠️ 體況異常 Debuff (拒保/除外)");
+                            showBanner("🔒 防護罩商店系統提示", "❌ 角色處於異常狀態，無法購買高階護盾！", "purple");
+                            playSfx('errorLock');
+                        }
+                    },
+                    {
+                        timeLabel: "00:11 - 00:25",
+                        duration: 9500,
+                        tag: "第二幕：隱瞞健康告知（穿上幻影金盾）",
+                        subtitle: "有些玩家會偷把傷口遮住、在商店勾選「我完全健康」。表面上雖然亮起了一層超華麗的金色護盾，看起來超有安全感……",
+                        action: () => {
+                            showSingleStage();
+                            hideBannerAndModals();
+                            setHud("LV.38", 200, 300, 300, 300, "⚠️ 隱藏警告：未誠實告知（幻影護盾裝備中）");
+                            setDebuffVisual(true, "🤥 隱藏傷勢 (違反誠實告知)");
+                            setShieldVisual(false, false, true);
+                            spawnFloatingText("✨ 獲得表面華麗的「幻影金盾」", "text-yellow-300");
+                            playSfx('equip');
+                        }
+                    },
+                    {
+                        timeLabel: "00:25 - 00:38",
+                        duration: 10500,
+                        tag: "第三幕：魔王揮刀！系統回溯判定無效",
+                        subtitle: "但當大魔王砍下來的瞬間，系統啟動回溯審查！抓到當初隱瞞傷勢，幻影護盾直接被判定無效蒸發，傷害 100% 灌進資產！",
+                        action: () => {
+                            showSingleStage();
+                            triggerStageShake();
+                            setShieldVisual(false, false, false);
+                            setHud("LV.38 破防重創", 20, 300, 0, 300, "🚨 違反保險法第64條：契約解除，理賠為 0！");
+                            setEquipVisible(true, true, true, true);
+                            showSystemModal(
+                                "🚨 偵測到違規隱瞞！護盾判定無效！",
+                                "系統回溯發現投保時隱瞞既有體況，金色幻影護盾當場解除消失！-300 傷害直接貫穿核心資產！"
+                            );
+                            playSfx('meteorHit');
+                        }
+                    },
+                    {
+                        timeLabel: "00:38 - 00:45",
+                        duration: 8500,
+                        tag: "第四幕：滿血健康 ＋ 誠實認證標章",
+                        subtitle: "趁著滿血健康時提早進場，並且誠實通過系統認證，你撐起的防護罩才會在關鍵時刻真正替你擋下致命一擊！",
+                        action: () => {
+                            showSingleStage();
+                            hideBannerAndModals();
+                            setDebuffVisual(false);
+                            setEquipVisible(true, true, true, false);
+                            setShieldVisual(true, true, false);
+                            setHud("LV.40 誠實認證", 300, 300, 300, 300, "✅ 誠實告知認證通過｜100% 堅固防護生效");
+                            spawnFloatingText("✅ 誠實告知認證：真金護盾！", "text-emerald-300");
+                            playSfx('shieldUp');
+                        }
+                    }
+                ]
+            },
+            3: {
+                title: "EP.3 終局之戰的兩大神技",
+                scenes: [
+                    {
+                        timeLabel: "00:00 - 00:12",
+                        duration: 9500,
+                        tag: "第一幕：後期冰凍麻痺（失能持續扣血）",
+                        subtitle: "遊戲玩到後期，比瞬間暴擊更可怕的是「無法行動的持續扣血」！一旦角色失能被冰凍，每個月跳出的照護消耗會慢慢磨光神裝。",
+                        action: () => {
+                            showSingleStage();
+                            hideBannerAndModals();
+                            setHud("LV.65 遊戲後期", 220, 300, 150, 300, "❄️ 中狀態：無法行動（每月持續流失 -1,000）");
+                            setDebuffVisual(true, "❄️ 冰凍麻痺失能狀態 (-1000/月)");
+                            setLtcCircle(false);
+                            showBanner("❄️ 觸發後期魔王詛咒：長期失能狀態", "每回合自動扣除巨額照護金流，神裝面臨變賣危機！", "purple");
+                            spawnFloatingText("-1,000 / 月 持續消耗！", "text-red-400");
+                            playSfx('errorLock');
+                        }
+                    },
+                    {
+                        timeLabel: "00:12 - 00:26",
+                        duration: 10000,
+                        tag: "第二幕：長照險（特定狀態觸發持續回血陣）",
+                        subtitle: "這時高階玩家預先配置的「長照持續回血陣」就會自動展開！只要處於特定失能狀態，腳下每個月都會湧出補給金流抵銷消耗！",
+                        action: () => {
+                            showSingleStage();
+                            hideBannerAndModals();
+                            setHud("LV.65 長照光環啟動", 300, 300, 200, 300, "🌿 觸發型長照回血陣生效：每月 +1,000 完美抵銷消耗");
+                            setDebuffVisual(true, "❄️ 失能狀態 (已被長照光環抵銷)");
+                            setLtcCircle(true);
+                            spawnFloatingText("🌿 +1,000/月 持續補血啟動！", "text-emerald-300");
+                            playSfx('healBuff');
+                        }
+                    },
+                    {
+                        timeLabel: "00:26 - 00:40",
+                        duration: 10500,
+                        tag: "第三幕：壽險（New Game+ 二週目黃金繼承寶箱）",
+                        subtitle: "當一週目旅程走到盡頭、角色登出遊戲時，最後神技「壽險傳承」就會發動——直接把愛與資產打包成黃金寶箱，空投給下一代！",
+                        action: () => {
+                            showSingleStage();
+                            hideBannerAndModals();
+                            setHud("LV.99 傳承交棒", 300, 300, 300, 300, "👑 觸發終局技能：New Game+ 二週目啟動資金空投");
+                            document.getElementById('new-game-plus-view').classList.remove('hidden');
+                            playSfx('treasure');
+                        }
+                    },
+                    {
+                        timeLabel: "00:40 - 00:45",
+                        duration: 8000,
+                        tag: "第四幕：人生 RPG 完整防禦裝備總結",
+                        subtitle: "從新手村的定期防護罩、後期的長照持續回血陣，到傳承下一代的二週目寶箱——你的人生 RPG 裝備欄，都配置齊全了嗎？",
+                        action: () => {
+                            showSingleStage();
+                            hideBannerAndModals();
+                            setDebuffVisual(false);
+                            setEquipVisible(true, true, true, false);
+                            setShieldVisual(true, true, false);
+                            setLtcCircle(true);
+                            document.getElementById('hud-renew-badge').classList.remove('hidden');
+                            setHud("LV.MAX 完美配置", 500, 500, 300, 300, "🏆 複合護盾 ＋ 長照回血陣 ＋ 二週目傳承寶箱 完備");
+                            spawnFloatingText("🏆 人生 RPG 防禦配置完成！", "text-amber-300");
+                            playSfx('shieldUp');
+                        }
+                    }
+                ]
+            }
+        };
+
+        // ==================== 播放器全域狀態 ====================
+        let currentEpisodeId = 1;
+        let currentSceneIdx = 0;
+        let isPlaying = false;
+        let sceneTimer = null;
+        let progressInterval = null;
+
+        // ==================== UI 舞台輔助函式 ====================
+        function showSingleStage() {
+            document.getElementById('single-stage-view').classList.remove('hidden');
+            document.getElementById('split-stage-view').classList.add('hidden');
+            document.getElementById('single-player-hud').classList.remove('hidden');
+        }
+
+        function showSplitStage() {
+            document.getElementById('single-stage-view').classList.add('hidden');
+            document.getElementById('split-stage-view').classList.remove('hidden');
+        }
+
+        function setHud(ageText, hp, maxHp, shield, maxShield, statusDesc) {
+            document.getElementById('hud-age-lv').textContent = ageText;
+            document.getElementById('hud-hp-text').textContent = `${hp} / ${maxHp} 萬`;
+            document.getElementById('hud-hp-bar').style.width = `${Math.min(100, Math.round((hp / maxHp) * 100))}%`;
+
+            document.getElementById('hud-shield-text').textContent = `${shield} 點`;
+            document.getElementById('hud-shield-bar').style.width = `${Math.min(100, Math.round((shield / maxShield) * 100))}%`;
+
+            document.getElementById('hud-buff-row').innerHTML = `<span class="text-[10px] font-bold text-amber-200">${statusDesc}</span>`;
+        }
+
+        function setEquipVisible(cash, etf, house, flyOut = false) {
+            const elCash = document.getElementById('equip-cash');
+            const elEtf = document.getElementById('equip-etf');
+            const elHouse = document.getElementById('equip-house');
+
+            elCash.className = `px-2 py-1 rounded-xl bg-amber-500/20 border border-amber-400/60 flex items-center gap-1 text-amber-200 text-[10px] font-bold transition-all duration-300 ${cash ? '' : 'hidden'} ${flyOut ? 'animate-fly-left' : ''}`;
+            elEtf.className = `px-2 py-1 rounded-xl bg-indigo-500/25 border border-indigo-400/70 flex items-center gap-1 text-indigo-200 text-[10px] font-bold transition-all duration-300 ${etf ? '' : 'hidden'} ${flyOut ? 'animate-fly-right' : ''}`;
+            elHouse.className = `px-2 py-1 rounded-xl bg-emerald-500/25 border border-emerald-400/70 flex items-center gap-1 text-emerald-200 text-[10px] font-bold transition-all duration-300 ${house ? '' : 'hidden'}`;
+        }
+
+        function setShieldVisual(innerBlue, outerGold, phantomGlitch) {
+            document.getElementById('visual-shield-inner').classList.toggle('hidden', !innerBlue);
+            document.getElementById('visual-shield-outer').classList.toggle('hidden', !outerGold);
+            document.getElementById('visual-shield-phantom').classList.toggle('hidden', !phantomGlitch);
+        }
+
+        function setDebuffVisual(show, text = "") {
+            const pill = document.getElementById('hero-debuff-pill');
+            pill.classList.toggle('hidden', !show);
+            if (text) document.getElementById('hero-debuff-text').textContent = text;
+        }
+
+        function setLtcCircle(show) {
+            document.getElementById('visual-ltc-circle').classList.toggle('hidden', !show);
+        }
+
+        function showBanner(title, desc, color = "red") {
+            const banner = document.getElementById('stage-event-banner');
+            const box = document.getElementById('stage-event-box');
+            banner.classList.remove('hidden');
+            if (color === "purple") {
+                box.className = "px-3 py-2 rounded-xl bg-purple-950/95 border border-purple-400 text-center shadow-xl";
+            } else {
+                box.className = "px-3 py-2 rounded-xl bg-red-950/95 border border-red-500 text-center shadow-xl";
+            }
+            document.getElementById('stage-event-title').textContent = title;
+            document.getElementById('stage-event-desc').textContent = desc;
+        }
+
+        function showSystemModal(title, body) {
+            const modal = document.getElementById('system-alert-modal');
+            modal.classList.remove('hidden');
+            document.getElementById('system-alert-title').textContent = title;
+            document.getElementById('system-alert-body').textContent = body;
+        }
+
+        function hideBannerAndModals() {
+            document.getElementById('stage-event-banner').classList.add('hidden');
+            document.getElementById('system-alert-modal').classList.add('hidden');
+            document.getElementById('new-game-plus-view').classList.add('hidden');
+        }
+
+        function triggerStageShake() {
+            const stage = document.getElementById('stage-container');
+            stage.classList.remove('animate-shake');
+            void stage.offsetWidth;
+            stage.classList.add('animate-shake');
+        }
+
+        function spawnFloatingText(text, colorClass = "text-amber-300") {
+            const layer = document.getElementById('floating-numbers-layer');
+            layer.innerHTML = '';
+            const el = document.createElement('div');
+            el.className = `animate-float-num font-mono-num text-sm font-black px-3 py-1 rounded-full bg-slate-950/90 border border-white/20 shadow-xl ${colorClass}`;
+            el.textContent = text;
+            layer.appendChild(el);
+        }
+
+        // ==================== 語音旁白 (Web Speech API) ====================
+        function speakSubtitle(text) {
+            if (!('speechSynthesis' in window)) return;
+            window.speechSynthesis.cancel();
+            const toggle = document.getElementById('tts-voice-toggle');
+            if (!toggle || !toggle.checked) return;
+
+            const utter = new SpeechSynthesisUtterance(text);
+            utter.lang = 'zh-TW';
+            utter.rate = 1.12;
+            utter.pitch = 1.0;
+            window.speechSynthesis.speak(utter);
+        }
+
+        // ==================== 劇本選擇與自動播放控制 ====================
+        function selectEpisode(epId) {
+            stopAutoPlay();
+            currentEpisodeId = epId;
+            currentSceneIdx = 0;
+
+            // 更新卡片樣式
+            [1, 2, 3].forEach(id => {
+                const card = document.getElementById(`ep-card-${id}`);
+                if (id === epId) {
+                    card.className = "text-left p-3.5 rounded-2xl border-2 border-amber-500 bg-amber-50/70 transition shadow-sm";
+                } else {
+                    card.className = "text-left p-3.5 rounded-2xl border border-stone-200 bg-white transition hover:border-amber-400";
+                }
+            });
+
+            document.getElementById('hud-episode-tag').textContent = EPISODES_DATA[epId].title;
+            renderSceneStepsList();
+            runScene(0, false);
+        }
+
+        function renderSceneStepsList() {
+            const listEl = document.getElementById('scene-steps-list');
+            const scenes = EPISODES_DATA[currentEpisodeId].scenes;
+            listEl.innerHTML = scenes.map((s, idx) => `
+                <div onclick="jumpToScene(${idx})" id="scene-step-item-${idx}" class="p-3 rounded-xl border ${idx === currentSceneIdx ? 'border-amber-500 bg-amber-50/80' : 'border-stone-200 bg-white'} hover:border-amber-400 cursor-pointer transition flex items-start justify-between gap-3">
+                    <div class="space-y-0.5">
+                        <div class="flex items-center gap-2">
+                            <span class="text-[11px] font-black px-2 py-0.5 rounded bg-stone-800 text-amber-300 font-mono-num">${s.timeLabel}</span>
+                            <span class="text-xs font-extrabold text-stone-800">${s.tag}</span>
+                        </div>
+                        <p class="text-xs text-stone-600 line-clamp-2 mt-1">${s.subtitle}</p>
+                    </div>
+                    <button class="shrink-0 w-7 h-7 rounded-lg bg-stone-100 hover:bg-amber-500 hover:text-white text-stone-600 flex items-center justify-center text-xs transition">
+                        <i class="fa-solid fa-play"></i>
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        function runScene(idx, speak = true) {
+            const ep = EPISODES_DATA[currentEpisodeId];
+            if (!ep || !ep.scenes[idx]) return;
+            currentSceneIdx = idx;
+            const scene = ep.scenes[idx];
+
+            // 更新底部字幕與時間碼
+            document.getElementById('subtitle-scene-tag').textContent = `🎬 ${scene.tag}`;
+            document.getElementById('subtitle-time-code').textContent = scene.timeLabel;
+            document.getElementById('subtitle-text').textContent = scene.subtitle;
+
+            // 更新進度條
+            const pct = Math.round(((idx + 1) / ep.scenes.length) * 100);
+            document.getElementById('theater-progress-bar').style.width = `${pct}%`;
+
+            // 高亮右側分鏡列表
+            renderSceneStepsList();
+
+            // 執行畫面特效
+            scene.action();
+
+            // 語音朗讀
+            if (speak) speakSubtitle(scene.subtitle);
+        }
+
+        async function startOrToggleAutoPlay() {
+            await initAudio();
+            if (isPlaying) {
+                stopAutoPlay();
+                return;
+            }
+            isPlaying = true;
+            updatePlayBtnUI();
+            playCurrentAndScheduleNext();
+        }
+
+        function playCurrentAndScheduleNext() {
+            if (!isPlaying) return;
+            const ep = EPISODES_DATA[currentEpisodeId];
+            const scene = ep.scenes[currentSceneIdx];
+            runScene(currentSceneIdx, true);
+
+            clearTimeout(sceneTimer);
+            sceneTimer = setTimeout(() => {
+                if (!isPlaying) return;
+                if (currentSceneIdx < ep.scenes.length - 1) {
+                    currentSceneIdx++;
+                    playCurrentAndScheduleNext();
+                } else {
+                    stopAutoPlay();
+                }
+            }, scene.duration);
+        }
+
+        function stopAutoPlay() {
+            isPlaying = false;
+            clearTimeout(sceneTimer);
+            if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+            updatePlayBtnUI();
+        }
+
+        function resetTheaterEpisode() {
+            stopAutoPlay();
+            currentSceneIdx = 0;
+            runScene(0, false);
+        }
+
+        async function jumpToScene(idx) {
+            await initAudio();
+            stopAutoPlay();
+            runScene(idx, true);
+        }
+
+        function updatePlayBtnUI() {
+            const btn = document.getElementById('btn-main-play');
+            const text = document.getElementById('btn-main-play-text');
+            if (isPlaying) {
+                btn.className = "flex-1 min-w-[180px] py-3 px-5 rounded-xl bg-stone-800 hover:bg-stone-900 text-amber-300 font-black text-sm shadow-md flex items-center justify-center gap-2 transition";
+                text.textContent = "⏸️ 暫停劇本播放";
+            } else {
+                btn.className = "flex-1 min-w-[180px] py-3 px-5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-black text-sm shadow-md flex items-center justify-center gap-2 transition";
+                text.textContent = "▶️ 一鍵自動開演本集劇本";
+            }
+        }
+
+        // ==================== 互動沙盒模式控制 ====================
+        let sandboxState = {
+            hp: 100,
+            shield: 0,
+            shieldType: 'none', // 'none', 'thin', 'thick', 'phantom'
+            hasDebuff: false,
+            cash: true,
+            etf: false,
+            house: false
+        };
+
+        async function sandboxAddAsset(type) {
+            await initAudio();
+            showSingleStage();
+            hideBannerAndModals();
+            if (type === 'cash') {
+                sandboxState.cash = true;
+                sandboxState.hp = Math.min(500, sandboxState.hp + 50);
+                spawnFloatingText("💰 存入現金袋 +50萬！", "text-amber-300");
+            } else if (type === 'etf') {
+                sandboxState.etf = true;
+                sandboxState.hp = Math.min(500, sandboxState.hp + 100);
+                spawnFloatingText("📘 裝備 ETF 魔法書 +100萬！", "text-indigo-300");
+            } else if (type === 'house') {
+                sandboxState.house = true;
+                sandboxState.hp = Math.min(500, sandboxState.hp + 150);
+                spawnFloatingText("🏰 築起房產堡壘 +150萬！", "text-emerald-300");
+            }
+            setEquipVisible(sandboxState.cash, sandboxState.etf, sandboxState.house, false);
+            setHud("沙盒模式", sandboxState.hp, 500, sandboxState.shield, 300, "已穿戴多元資產裝備");
+            document.getElementById('subtitle-text').textContent = `【沙盒實測】核心資產已累積至 ${sandboxState.hp} 萬！現在請測試加裝防護罩或直接召喚隕石攻擊。`;
+            playSfx('equip');
+        }
+
+        async function sandboxSetShield(mode) {
+            await initAudio();
+            showSingleStage();
+            hideBannerAndModals();
+            setLtcCircle(false);
+
+            if (mode === 'debuff') {
+                sandboxState.hasDebuff = true;
+                sandboxState.shield = 0;
+                sandboxState.shieldType = 'none';
+                setShieldVisual(false, false, false);
+                setDebuffVisual(true, "⚠️ 體況異常 Debuff (商店鎖定)");
+                showBanner("🔒 商店鎖定無法購買", "角色已染上慢性體況異常，無法正常加裝防護罩！", "purple");
+                setHud("沙盒模式", sandboxState.hp, 500, 0, 300, "❌ 體況異常：商店拒保鎖定中");
+                document.getElementById('subtitle-text').textContent = "【現實痛點】一旦失去健康才想買保險，系統商店會直接鎖死！";
+                playSfx('errorLock');
+                return;
+            }
+
+            if (mode === 'thin') {
+                sandboxState.hasDebuff = false;
+                sandboxState.shield = 50;
+                sandboxState.shieldType = 'thin';
+                setDebuffVisual(false);
+                setShieldVisual(true, false, false);
+                setHud("沙盒模式", sandboxState.hp, 500, 50, 300, "🛡️ 已開啟基礎薄護盾 (50點)");
+                document.getElementById('subtitle-text').textContent = "【沙盒實測】已開啟 50 點薄護盾。試試看遇到 -300 隕石會發生什麼事？";
+                playSfx('shieldUp');
+            } else if (mode === 'thick') {
+                sandboxState.hasDebuff = false;
+                sandboxState.shield = 300;
+                sandboxState.shieldType = 'thick';
+                setDebuffVisual(false);
+                setShieldVisual(true, true, false);
+                document.getElementById('hud-renew-badge').classList.remove('hidden');
+                setHud("沙盒模式", sandboxState.hp, 500, 300, 300, "🛡️ 已開啟複合厚護盾 (300點) + 保證續保");
+                document.getElementById('subtitle-text').textContent = "【沙盒實測】已疊加 300 點複合厚護盾與保證續保核心！現在召喚隕石試試！";
+                playSfx('shieldUp');
+            } else if (mode === 'phantom') {
+                sandboxState.hasDebuff = true;
+                sandboxState.shield = 300;
+                sandboxState.shieldType = 'phantom';
+                setDebuffVisual(true, "🤥 隱瞞體況投保");
+                setShieldVisual(false, false, true);
+                setHud("沙盒模式", sandboxState.hp, 500, 300, 300, "⚠️ 表面護盾 300 點 (未誠實告知幻影盾)");
+                document.getElementById('subtitle-text').textContent = "【沙盒實測】帶著體況卻隱瞞告知買到「幻影金盾」，表面有 300 點護甲，按一下隕石攻擊看看結果！";
+                playSfx('equip');
+            }
+        }
+
+        async function sandboxTriggerAttack(type) {
+            await initAudio();
+            showSingleStage();
+            hideBannerAndModals();
+
+            if (type === 'meteor') {
+                triggerStageShake();
+                playSfx('meteorHit');
+
+                if (sandboxState.shieldType === 'phantom') {
+                    sandboxState.shield = 0;
+                    sandboxState.hp = Math.max(10, sandboxState.hp - 300);
+                    setShieldVisual(false, false, false);
+                    setEquipVisible(sandboxState.cash, sandboxState.etf, sandboxState.house, true);
+                    showSystemModal("🚨 違反誠實告知！護盾判定無效！", "系統查出投保時隱瞞體況（違反保險法第64條），金色幻影護盾直接解除蒸發！-300 傷害全數扣減資產！");
+                    setHud("破防重創", sandboxState.hp, 500, 0, 300, "🚨 幻影護盾無效！資產遭重創 -300萬");
+                    document.getElementById('subtitle-text').textContent = "【破防結果】隱瞞告知買到的護盾在理賠時直接被系統判定無效，資產裝備當場噴飛！";
+                } else if (sandboxState.shield >= 300) {
+                    sandboxState.shield = 0;
+                    spawnFloatingText("🛡️ 護盾完美擋下 -300 傷害！資產 0 損傷！", "text-emerald-300");
+                    setHud("完美防禦", sandboxState.hp, 500, 300, 300, "🔄 保證續保核心發動：護盾自動充能回滿！");
+                    document.getElementById('subtitle-text').textContent = "【防禦成功】300 點複合厚護盾完全吸收隕石傷害，裡面的 ETF 與房產毫髮無傷，且保證續保讓護盾隔年自動回滿！";
+                } else {
+                    const overflow = 300 - sandboxState.shield;
+                    sandboxState.shield = 0;
+                    sandboxState.hp = Math.max(10, sandboxState.hp - overflow);
+                    setShieldVisual(false, false, false);
+                    setEquipVisible(sandboxState.cash, sandboxState.etf, sandboxState.house, true);
+                    spawnFloatingText(`💥 破防！-${overflow}萬 直接貫穿資產！`, "text-red-400");
+                    setHud("破防噴裝", sandboxState.hp, 500, 0, 300, `💥 護盾過薄碎裂！被迫變賣股票老本 -${overflow}萬`);
+                    document.getElementById('subtitle-text').textContent = `【破防結果】護盾不足，溢出的 ${overflow} 點傷害直接貫穿本體，被迫賣股票跟動用老本去賠！`;
+                }
+            } else if (type === 'ltc') {
+                setDebuffVisual(true, "❄️ 失能無法行動 (-1000/月)");
+                setLtcCircle(true);
+                spawnFloatingText("🌿 長照回血陣 +1000/月 持續補血！", "text-emerald-300");
+                setHud("長照Buff啟動", sandboxState.hp, 500, sandboxState.shield, 300, "🌿 特定失能狀態觸發：每月自動補給金流");
+                document.getElementById('subtitle-text').textContent = "【長照 Buff】當角色進入長期失能狀態，腳下自動展開綠色持續回血陣，每個月補血保護資產不被磨光！";
+                playSfx('healBuff');
+            } else if (type === 'ngplus') {
+                document.getElementById('new-game-plus-view').classList.remove('hidden');
+                document.getElementById('subtitle-text').textContent = "【二週目傳承】壽險就像留給下一代新手村的「黃金啟動寶箱」，一週目登出時直接空投滿格資金！";
+                playSfx('treasure');
+            }
+        }
+
+        // ==================== 分頁切換與純淨錄影模式 ====================
+        function switchMainTab(tab) {
+            stopAutoPlay();
+            ['theater', 'sandbox', 'codex'].forEach(t => {
+                document.getElementById(`panel-${t}`).classList.toggle('hidden', t !== tab);
+                const btn = document.getElementById(`tab-btn-${t}`);
+                if (t === tab) {
+                    btn.className = "px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all bg-stone-800 text-white shadow-sm";
+                } else {
+                    btn.className = "px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all text-stone-600 hover:text-stone-900";
+                }
+            });
+        }
+
+        function toggleCleanRecordMode() {
+            document.body.classList.toggle('clean-record-mode');
+            const isClean = document.body.classList.contains('clean-record-mode');
+            document.getElementById('clean-mode-overlay').classList.toggle('hidden', !isClean);
+        }
+
+        function copyCodexPrompt() {
+            const textarea = document.getElementById('codex-prompt-textarea');
+            textarea.select();
+            document.execCommand('copy');
+            const btn = document.getElementById('btn-copy-codex');
+            const originalHTML = btn.innerHTML;
+            btn.innerHTML = `<i class="fa-solid fa-check"></i>已複製！可直接貼給 Codex`;
+            setTimeout(() => { btn.innerHTML = originalHTML; }, 2500);
+        }
+
+        // 初始化載入第一集第一幕
+        window.onload = function() {
+            selectEpisode(1);
+        };
+    </script>
+</body>
+</html>
